@@ -49,6 +49,11 @@ gravity = -9.8
 def applyGravity():
     for i in range(nx):
         for j in range(nx):
+            if inDomain(i, j) and (marker[i,j] == 0 or marker[i,j] == 2):
+                continue
+            if inDomain(i, j-1) and (marker[i,j-1] == 0 or marker[i,j-1] == 2):
+                continue
+            
             gridv[i,j] += dt * gravity
 
 def boundary():
@@ -164,6 +169,8 @@ def solvePressure():
         for j in range(nx):
             idx = j * nx + i
             pressure[i,j] = pflat[idx]
+            
+    
     
 def applyPressure():
     for i in range(nx):

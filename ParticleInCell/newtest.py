@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-nx = 8
+nx = 32
 
 
 gridu = np.zeros((nx+1,nx))
@@ -15,7 +15,7 @@ gridVLast = np.zeros((nx,nx+1))
 divergence = np.zeros((nx,nx))
 pressure = np.zeros((nx,nx))
 pressureTemp = np.zeros((nx+2,nx+2))
-n_sqrt = 4
+n_sqrt = 32
 n_particle = n_sqrt * n_sqrt
 particlePos = np.zeros((n_particle,2))
 particleVel = np.zeros((n_particle,2))
@@ -38,18 +38,19 @@ for i in range(nx):
             marker[i,j] = 0
             
 for k in range(n_particle):
-    x = int(k % n_sqrt)
-    y = int(k / n_sqrt)
-    particlePos[k,0] = x
-    particlePos[k,1] = y
+    x = int(k % n_sqrt) / n_sqrt * (nx//2 - 1)
+    y = int(k / n_sqrt) / n_sqrt * (nx//2 - 1)
+    particlePos[k,0] = x + 5 / 4
+    particlePos[k,1] = y + 5 / 4
     
 dt = 1 / 40.0
-gravity = -9.8
+gravity = - 1
 
 def applyGravity():
     for i in range(nx):
         for j in range(nx):
-            gridv[i,j] += dt * gravity
+            if marker[i,j] == 1:
+                gridv[i,j] += dt * gravity * (nx - j)
 
 def boundary():
     for i in range(nx):
@@ -59,6 +60,19 @@ def boundary():
                 gridu[i+1,j] = 0
                 gridv[i,j] = 0
                 gridv[i,j+1] = 0
+                
+    # for i in range(1,nx):
+    #     for j in range(nx):
+    #         if marker[i-1,j] == 0 and marker[i,j] == 1:
+    #             gridu[i,j] = -gridu[i+1,j]
+    #         if marker[i,j] == 1 and marker[i+1,j] == 1:
+    #             gridu[i+1,j] = -gridu[i,j]
+    # for i in range(nx):
+    #     for j in range(1,nx):
+    #         if marker[i,j-1] == 0 and marker[i,j] == 1:
+    #             gridv[i,j] = -gridv[i,j+1]
+    #         if marker[i,j] == 1 and marker[i,j+1] == 1:
+    #             gridv[i,j+1] = -gridv[i,j]
     
 def inDomain(i,j):
     if i >= 0 and i < nx and j >= 0 and j < nx:
@@ -134,7 +148,7 @@ def calcDivergence():
     for i in range(nx):
         for j in range(nx):
             if marker[i,j] == 1:
-                divergence[i,j] = (gridu[i,j] - gridu[i+1,j]) + (gridv[i,j] - gridv[i,j+1])
+                divergence[i,j] = (gridu[i+1,j] - gridu[i,j]) + (gridv[i,j+1] - gridv[i,j])
             else:
                 divergence[i,j] = 0
     
@@ -159,19 +173,35 @@ def solvePressure():
         for j in range(nx):
             idx = j * nx + i
             divflat[idx] = divergence[i,j]
-    pflat = np.dot(np.linalg.inv(A),divflat)
+    pflat = np.dot(np.linalg.inv(A),-divflat)
     for i in range(nx):
         for j in range(nx):
             idx = j * nx + i
             pressure[i,j] = pflat[idx]
+            
+    pressureTemp[:,:] = 0
+    for k in range(1000):
+        for i in range(1,nx+1):
+            for j in range(1,nx+1):
+                if marker[i-1,j-1] == 2:
+                    continue
+                pressureTemp[i,j] = (pressureTemp[i+1,j] + pressureTemp[i-1,j]
+                                  + pressureTemp[i,j+1] + pressureTemp[i,j-1] - divergence[i-1,j-1])/4
+        pressureTemp[0,:] = pressureTemp[1,:]
+        pressureTemp[:,0] = pressureTemp[:,1]
+        pressureTemp[nx+1,:] = pressureTemp[nx,:]
+        pressureTemp[:,nx+1] = pressureTemp[:,nx]
+            
     
 def applyPressure():
     for i in range(nx):
         for j in range(nx):
             if (inDomain(i, j) and marker[i,j] == 1) or (inDomain(i-1, j) and marker[i-1,j] == 1):
-                gridu[i,j] += (pressure[i-1,j] - pressure[i,j])
+                # gridu[i,j] += (pressure[i-1,j] - pressure[i,j])
+                gridu[i,j] += (pressureTemp[i,j+1] - pressureTemp[i+1,j+1])
             if (inDomain(i, j) and marker[i,j] == 1) or (inDomain(i, j-1) and marker[i,j-1] == 1):
-                gridv[i,j] += (pressure[i,j-1] - pressure[i,j])
+                # gridv[i,j] += (pressure[i,j-1] - pressure[i,j]) 
+                gridv[i,j] += (pressureTemp[i+1,j] - pressureTemp[i+1,j+1])
     
 
 
@@ -210,6 +240,7 @@ def particleAdvect():
     for k in range(n_particle):
         mid = particlePos[k,:] + dt * interpolate(particlePos[k,:],gridu,gridv) * 0.5
         particlePos[k,:] = mid + dt * interpolate(mid,gridu,gridv)
+        # particlePos[k,:] += dt * particleVel[k,:]
     
 def updateMarker():
     
@@ -223,7 +254,8 @@ def updateMarker():
     for k in range(n_particle):
         i = int(particlePos[k,0])
         j = int(particlePos[k,1])
-        marker[i,j] = 1
+        if marker[i,j] == 2:
+            marker[i,j] = 1
 
 def particleToGrid():
     gridu[:,:] = 0
@@ -240,25 +272,21 @@ def particleToGrid():
         
         gridu[gx,gy] += (1 - fx) * (1 - fy) * particleVel[k,0]
         gridu[gx+1,gy] += fx * (1 - fy) * particleVel[k,0]
+        gridu[gx,gy+1] += (1 - fx) * fy * particleVel[k,0]
+        gridu[gx+1,gy+1] += fx * fy * particleVel[k,0]
         
         griduw[gx,gy] += (1 - fx) * (1 - fy)
         griduw[gx+1,gy] += fx * (1 - fy)
+        griduw[gx,gy+1] += (1 - fx) * fy
+        griduw[gx+1,gy+1] += fx * fy
         
         gridv[gx,gy] += (1 - fx) * (1 - fy) * particleVel[k,1]
         gridv[gx,gy+1] += (1 - fx) * fy * particleVel[k,1]
-        
-        gridvw[gx,gy] += (1 - fx) * (1 - fy)
-        gridvw[gx,gy+1] += (1 - fx) * fy
-        
-        
-        gridu[gx,gy+1] += (1 - fx) * fy * particleVel[k,0]
-        gridu[gx+1,gy+1] += fx * fy * particleVel[k,0]
         gridv[gx+1,gy] += fx * (1 - fy) * particleVel[k,1]
         gridv[gx+1,gy+1] += fx * fy * particleVel[k,1]
         
-        
-        griduw[gx,gy+1] += (1 - fx) * fy
-        griduw[gx+1,gy+1] += fx * fy
+        gridvw[gx,gy] += (1 - fx) * (1 - fy)
+        gridvw[gx,gy+1] += (1 - fx) * fy
         gridvw[gx+1,gy] += fx * (1 - fy)
         gridvw[gx+1,gy+1] += fx * fy
         
@@ -281,9 +309,9 @@ def saveVelocity():
     gridVLast = gridv.copy()
 
 time = 0
-timeFinal = 10
+timeFinal = 1000
 while(time < timeFinal):
-    time = 1
+    time += 1
     
     applyGravity()
     boundary()
@@ -303,17 +331,21 @@ while(time < timeFinal):
     particleAdvect()
     
     
-    fig, ax = plt.subplots()
-    plt.title('f model: T=%f' %time)
-    ax.set_xlim(-1,nx+1)
-    ax.set_ylim(-1,nx+1)
-    for i in range(n_particle):
-        circle1 = plt.Circle((particlePos[i,0], particlePos[i,1]), 0.1)
-        ax.add_artist(circle1)
-    plt.show()
     
     updateMarker()
     particleToGrid()
     
     saveVelocity()
+    
+    if (time % 5) != 0:
+        continue
+    
+    fig, ax = plt.subplots()
+    plt.title('f model: T=%f' %time)
+    ax.set_xlim(0.8,nx-0.2)
+    ax.set_ylim(0.8,nx-0.2)
+    for i in range(n_particle):
+        circle1 = plt.Circle((particlePos[i,0], particlePos[i,1]), 0.1)
+        ax.add_artist(circle1)
+    plt.show()
     

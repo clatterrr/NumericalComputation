@@ -14,7 +14,7 @@ Hy = np.zeros((Np,K))
 resHx = np.zeros((Np,K))
 resHy = np.zeros((Np,K))
 resEz = np.zeros((Np,K))
-N = 10
+N = 2
 
 
 def JacobiGQ(alpha,beta,N):
@@ -68,7 +68,7 @@ def Warpfactor(N,rout):
     
     return req
 
-waste,rLGL = JacobiGQ(0,0,10)
+waste,rLGL = JacobiGQ(0,0,2)
 rmin = abs(rLGL[0] - rLGL[1])
 
 N = 10
